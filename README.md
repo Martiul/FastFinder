@@ -3,7 +3,7 @@ _Find things. Fast._
 
 **FastFinder** is command line tool to help navigate through large codebases (think 10GB+). It works by first storing all file names found within a directory into a cache. **FastFinder** executes case-insensitive `grep` on this cache and displays the results to the user. Selection is done by entering the number next to the result, which will prepend the path by any command passed by the user.
 
-![Example usage](https://github.com/Martiul/FastFinder/raw/master/ff_sample.png "UML Diagram" "Example usage")
+![Example usage](https://github.com/Martiul/FastFinder/raw/master/ff_sample.png?raw=true "Example usage")
 
 This makes finding and opening a file in your favourite text editor an easy two-step process. The flexibility of **FastFinder** also makes it really easy to use commands like `p4 edit` and `git diff` on specific files. The default command for **FastFinder** is `vim`.
 
