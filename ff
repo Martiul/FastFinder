@@ -1,0 +1,154 @@
+#!/bin/bash
+
+#
+# FastFinder
+# Author: Martin Lui
+# 
+# FastFinder is a file-finding/directory-navigating tool that works by
+# by storing all file and directory names into a cache and querying through them.
+# When a query is passed, the top 10 grep results from the cache are presented
+# and passing the number of the entry will run a pre-configured command against
+# that path.
+#
+
+OUTPUT_DIR=".ff"
+CONFIG_FILE="$OUTPUT_DIR/ff.config"
+FILES_FILE="$OUTPUT_DIR/ff_files"
+DIRECTORIES_FILE="$OUTPUT_DIR/ff_directories"
+
+option=""
+query=""
+init=0
+
+
+function displayHelp() {
+    echo "FastFinder - Find things. Fast"
+    echo
+    echo "USAGE: ff [ <option> | <query> ]"
+    echo "Get started with 'ff -init'!"
+    echo
+    echo
+    echo "OPTIONS:"
+    echo "  -init                    Sets up FastFinder files in the current directory"
+    echo "                           The default command is set to 'vim'"
+    echo "  -config                  View the FastFinder config file"
+    echo "  -cmd=<CMD>               Sets the command for the current query"
+    echo "  -set-default=<CMD>       Sets the default command for future FastFinder calls"
+    echo "  -help                    View the help menu"
+    echo
+    echo
+    echo "EXAMPLES:"
+    echo "  ff foobar                       Searches for files matching 'foobar' (case insensitive)"
+    echo "  ff -cmd=code foobar             Searches for files matching 'foobar' and performs the 'code' command on the selected file"
+    echo "  ff -set-default=\"p4 edit\"         Set the default command to run against future queries to 'p4 edit'"
+    echo "  . ff -cmd=cd MyDirectory        The preceding dot is required when the command is set to cd"
+    echo 
+    echo "Recommendation: add the following line to your bash profile"
+    echo " function ffc() { . ff \"\$@\" -cmd=cd }  # Then try 'ffc <directory name>'"
+    echo
+}
+
+function err() {
+    echo
+    echo "ERROR: $1"
+    echo "USAGE: ff [-<options> | <query> ] or see 'ff --help'"
+    exit 1
+}
+
+function setConfigVariable() {
+    replacement=${@:2}
+    replacement=${replacement/\"/\\\"}  # Escape quotes
+    sed -i "s/$1=.*/$1='$replacement'/" $CONFIG_FILE
+}
+
+function loadConfig() {
+    . $CONFIG_FILE
+    if [[ $? -ne 0 ]]; then
+        err "Configuration file missing. Use 'ff -init' to initialize"
+    fi;
+}
+
+if [[ $# -eq 0 ]]; then
+    displayHelp
+    exit 0
+fi;
+
+#########################
+###  PARSE ARGUMENTS  ###
+#########################
+for arg in "$@"
+do
+    if [[ $arg =~ ^- ]]; then
+        # Found an option (the option is everything after -)
+        if [[ $option != "" ]]; then
+            new_option=$(echo $arg | cut -c 2-)
+            err "Only one option can be entered: '-$option' and '-$new_option' were passed"
+        fi
+
+        option=$(echo $arg | cut -c 2-)
+        if [[ $option == "init" ]]; then
+            init=1
+        elif [[ $option == "help" ]] || [[ $option == "-help" ]]; then
+            displayHelp
+            exit 0
+        elif [[ $option == "config" ]]; then
+            loadConfig
+            echo "FastFinder Configuration File:"
+            cat $CONFIG_FILE
+            exit 0
+        elif [[ $option =~ ^cmd=.* ]]; then
+            cmd=$(echo $option | cut -c 5- )    # Extract the cmd passed by the user
+        elif [[ $option =~ ^set-default=.* ]]; then
+            loadConfig
+            cmd=$(echo $option | cut -c 13- )   # Extract the cmd passed by the user
+            echo "Default command set to '$cmd'"
+            echo
+            setConfigVariable "cmd" $cmd
+            exit 0
+        fi
+    elif [[ $query == "" ]]; then
+        # Found a term to query for
+        query=$arg
+    else
+        err "Only one query can be entered: '$query' and '$arg' were passed"
+    fi
+done
+
+
+#############
+###  RUN  ###
+#############
+numberRegex='^[0-9]+$'
+if [[ $init -eq 1 ]]; then
+    echo "Initializing FastFinder..."
+    echo "This might take a while"
+    mkdir -p .ff
+    find . -type f > $FILES_FILE
+    find . -type d > $DIRECTORIES_FILE
+    echo "cmd=vim" > $CONFIG_FILE
+    echo
+    echo "DONE: Found $(wc -l $FILES_FILE | cut -d ' ' -f 1) files and $(wc -l $DIRECTORIES_FILE | cut -d ' ' -f 1) directories"
+    echo "Get started with 'ff <query>'"
+    echo
+elif [[ $query != "" ]]; then
+    if [[ $cmd == "" ]]; then
+        loadConfig
+    fi
+
+    DATA_FILE=$FILES_FILE
+
+    # Special case if using cd: ff must have a . preceding it (e.g. . ff)
+    # Recommended to add an alias to this
+    if [[ $cmd == "cd" ]]; then
+        echo "WARNING: When the command is 'cd', ff must be called as '. ff'. See 'ff -help' for more information"
+        DATA_FILE=$DIRECTORIES_FILE
+    fi
+	grep "$query" -i $DATA_FILE | head -n10 | cat -n 
+	printf "Enter a selection (q to quit): $cmd "
+	read selection
+	if [[ $selection != "q" ]] && [[ $selection =~ $numberRegex ]]; then
+		$cmd $(grep "$query" -i $DATA_FILE | sed -n "$selection p")
+	fi
+else
+    err "No query provided!"
+fi
